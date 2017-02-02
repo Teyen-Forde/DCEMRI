@@ -1,4 +1,4 @@
-function [x,out] = BCS(opts)
+function [x,U,V, out] = BCS(opts)
 %% set up parameters and operators
 A       = opts.FT;
 D       = opts.TV;
@@ -42,7 +42,8 @@ while ~converged
     %%M
     %% update U using cgsolve
     %mldivide solve A*X=B
-    U=(eye(r)+V*V')\(zU+wU+(zUV+wUV)*V');
+%     U=(eye(r)+V*V')/(zU+wU+(zUV+wUV)*V');
+    U=(zU+wU+(zUV+wUV)*V')*pinv(eye(r)+V*V');
     V=(eye(r)+U'*U)\(zV+wV+U'*(zUV+wUV));
     FUV = F(U*V);
     wU = wU- gamma*(U-zU);
@@ -69,8 +70,8 @@ while ~converged
         converged = 1 ;
     end
 end
-
-x   = reshape((U*V) * dscale, imgSize,imgSize,ETL);
+U = U *dscale;
+x   = reshape((U*V), imgSize,imgSize,ETL);
 
 fprintf('Number of total iterations is %d. \n',iter);
 return;
@@ -79,7 +80,7 @@ return;
 
     function k=F(x)
         k=zeros(size(b));
-        %         xbt  = reshape(x * basis',[imgSize,imgSize, ETL]);
+        x = reshape(x,[imgSize,imgSize, ETL]);
         xbts  = repmat(x,[1,1,1,coils]);
         for ee = 1 : ETL
             k(:,:,:,ee) = A{ee}*(squeeze(xbts(:,:,ee,:)).*smaps);
@@ -90,15 +91,15 @@ return;
         for ee = 1: ETL
             xb(:,:,ee,:) = A{ee}'*k(:,:,:,ee).*conj(smaps);
         end
-        x = sum(xb,4);
-        %         x  = reshape(xb, imgSize^2, ETL)*basis;
+        xb = sum(xb,4);
+        x  = reshape(xb, imgSize^2, ETL);
     end
     function u=proxTV(g)
         tau=0.249;
         %         maxINNERiter=10;
         
-        g=reshape(g,imgSize,imgSize,numcoeff);
-        udual=zeros(imgSize,imgSize,numcoeff,dim);
+        g=reshape(g,imgSize,imgSize,r);
+        udual=zeros(imgSize,imgSize,r,dim);
         %         udual_old = udual;
         for i=1:16%8~16 are reasonable
             DDtz=D*(D'*udual+g./lbd);
@@ -118,12 +119,12 @@ return;
                 fprintf('lbd / 1.618 = %.3e\t, rnorm = %.3e\t, snorm = %.3e\n',lbd, rnorm, snorm);
             end
         end
-        u=reshape(u,imgSize^2,numcoeff);
+        u=reshape(u,imgSize^2,r);
     end
     function v = proxL2(v)%epsilon-radius ball centered at b
         n_v = norm(v(:));
-        if n_v > 1;
-            v =  v/n_vd;
+        if n_v > 1
+            v =  v/n_v;
         end
     end
 
