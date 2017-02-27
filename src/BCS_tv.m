@@ -21,7 +21,7 @@ gamma = 1.618;
 %%
 AA = @(x) mu*x+FT(F(x));
 maxcgiter = 16;
-tol = 5e-4;
+tol = 1e-3;
 U = zeros(imgSize*imgSize,r);
 V = rand(r, ETL);
 
@@ -35,20 +35,22 @@ tic;
 while ~converged
     
     %%
-    zU  = proxTV(U-wU);
+     zU  = proxTV(U-wU);
+%     zU = proxL1(U-wU);
     zV  = proxL2(V-wV);
     bb = FTb+mu*(U*V-wUV);
     zUV  = cgsolve(AA,bb,tol,maxcgiter);
     %%M
     %% update U using cgsolve
     %mldivide solve A*X=B
-%     U=(eye(r)+V*V')/(zU+wU+(zUV+wUV)*V');
+    %     U=(eye(r)+V*V')/(zU+wU+(zUV+wUV)*V');
     U=(zU+wU+(zUV+wUV)*V')*pinv(eye(r)+V*V');
     V=(eye(r)+U'*U)\(zV+wV+U'*(zUV+wUV));
-    FUV = F(U*V);
+    UV=U*V;
+    FUV = F(UV);
     wU = wU- gamma*(U-zU);
     wV = wV -gamma*(V-zV);
-    wUV = wUV -gamma*(U*V-zUV);
+    wUV = wUV -gamma*(UV-zUV);
     
     %% stop criterion
     iter=iter+1;
@@ -60,10 +62,10 @@ while ~converged
     fprintf('Iter %d/%d: obj error = %g\n', iter,maxiter,objerr);
     
     
-%     if stopCriterion < epsilon
-%         disp('StopCriterion Achieved') ;
-%         converged = 1;
-%     end
+    %     if stopCriterion < epsilon
+    %         disp('StopCriterion Achieved') ;
+    %         converged = 1;
+    %     end
     
     if iter >=maxiter
         disp('Maximum iterations reached') ;
@@ -127,7 +129,12 @@ return;
             v =  v/n_v;
         end
     end
-
+    function u = proxL1(u)%soft thresholding
+%         u = max(0, u-lbd)-max(0,-u-lbd);
+        au = abs(u);
+        u = u./au.*max(0,au-lbd);
+        u(isnan(u))=0;
+    end
 end
 
 

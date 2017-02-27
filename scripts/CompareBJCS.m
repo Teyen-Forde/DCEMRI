@@ -56,35 +56,37 @@ params.TV = TV_3D;
 params.basis = basis;
 params.maxiter =30;
 params.lbd = 1.2e-5/3;
-params.mu = params.lbd * 288;
+mu =0;
 params.dim = 3;
 for i = 2
+    for j=1
 params.data = DATA{i};
 params.epsilon = sqrt(numel(kdata)+8*sqrt(numel(kdata)))*sigma{i};
+params.mu = params.lbd * 288*mu(j);
 
 tic
-[JCS,outJCS] = JCS(params);
+[JCS,outJCS] = JCS_tv(params);
 toc
-
+out{j} = rot90(JCS);
+    end
 end
 %% BCS
 clear params
 params.FT = FT;
 params.smaps = b1;
-params.TV = TV_3D;
+params.TV = TV_Spat;
 params.basis = basis;
 params.maxiter =30;
 params.lbd = 1.2e-5/3;
-params.mu = 1;
-params.dim = 3;
+params.mu = 0.1;
+params.dim = 2;
 params.r = 40;
 for i = 2
 params.data = DATA{i};
 params.epsilon = sqrt(numel(kdata)+8*sqrt(numel(kdata)))*sigma{i};
 
 tic
-[BCS, U, V, outBCS] = BCS(params);
+[BCS, U, V, outBCS] = BCS_tv(params);
 toc
-% CS=reshape(PCCp*basis',imSize,imSize,nt);
-% out{3,i}=rot90(CS);
+BCS = rot90(BCS);
 end

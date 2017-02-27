@@ -84,19 +84,21 @@ hold on,plot(abs(Vt(:,8)))
 % basis=V(:,1:4);
 basis=eye(76);
 clear params
-params.TV = TVOP3D;
+params.TV = TV_3D;
 params.FT = FT;
-params.smaps = b1;
-params.data = kdata;
-params.basis = basis;
-params.maxiter =30;
+% params.smaps = b1;
+% params.data = kdata;
+% params.basis = basis;
+params.maxiter =15;
 sigma = std(reshape(kdata([1:8,end-7:end],:,:),[],1));
 params.epsilon = sqrt(numel(kdata)+8*sqrt(numel(kdata)))*sigma;
+% params.epsilon = 1e-4;
 params.lbd = 1.2e-5/3;
+% params.dim = 3;
 
 
 tic
-[PCCp,outCS] = CS_tv(params);
+[PCCp,outCS] = CS_tv(params,kdata,b1);
 toc
 PCCpa=PCCp*basis';
 CS=reshape(PCCpa,imSize,imSize,nt);
@@ -117,7 +119,7 @@ end
 
 figure,plot(relerr)
 title('PCA: RelErr of frames')
-figure,imshow(abs([imgt(:,:,19),CS(:,:,19),5*abs(imgt(:,:,19)-CS(:,:,19))]),[])
+figure,imshow(abs([imgt(:,:,19),CS(:,:,19),10*abs(imgt(:,:,19)-CS(:,:,19))]),[])
 ylabel('PCA')
 
 %% Joint TV

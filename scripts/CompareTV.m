@@ -15,7 +15,7 @@ coils=24;
 for tt=1:nt
     
     kt=k(:,(tt-1)*nspokes+1:tt*nspokes);
-%     wt=abs(kt)./max(abs(kt(:)));
+    wt=abs(kt)./max(abs(kt(:)));
 %         FT{tt}=NUFFT(kt,1,1,0,N,2);
     FT{tt}=NUFFT_GPU(N,N*2, 5.5, nspokes,kt,ones(size(kt)));
 end
@@ -167,6 +167,29 @@ tic
 [gtv,~] = CS_gtv(params);
 toc
 out{6,i}=rot90(gtv);
+end
+%% (6)LSA
+clear params
+params.TV = TV_3D;
+params.FT = FT;
+params.smaps = b1;
+params.data = kdata;
+params.maxiter = 20;
+% sigma=std(reshape(kdata([1:2,end-1:end],:,:),[],1));
+% params.epsilon = sqrt(numel(kdata)+8*sqrt(numel(kdata)))*sigma;
+params.lbd = 1.2e-5/1.5;
+params.mu = 1.2e-5/1.5*288;
+params.dim =3;
+
+for i = 2 : 3
+params.data = DATA{i};
+params.epsilon = sqrt(numel(kdata)+8*sqrt(numel(kdata)))*sigma{i};
+
+tic
+[L,S,~] = rpcacs(params);
+LpS=L+S;
+toc
+newout{9,i}=rot90(LpS);
 end
 %%
 addpath('kidney_phantomgeneration/')

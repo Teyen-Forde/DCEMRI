@@ -1,27 +1,28 @@
-function [x,out] = CS_gtv(opts)
+function [x,out] = CS_LLRtv(opts,b,smaps)
 %% set up parameters and operators
 A       = opts.FT;
-% D       = opts.TV;
-b       = opts.data;%dimension nx,ny,nc
-smaps   = opts.smaps;
+D       = opts.TV;
+% b       = opts.data;%dimension nx,ny,nc
+% smaps   = opts.smaps;
 imgSize = size(smaps,1);
 coils   = size(smaps,3);
 ETL     = size(b,4);
 maxiter = opts.maxiter;
 epsilon = opts.epsilon;%depending on noise std deviation
+lbd     = opts.lbd;%Augmented Lagrangian penalty parameter
 mu      = opts.mu;%Augmented Lagrangian penalty parameter
 %normalize data
 dscale  = norm(abs(b(:)));
 b       = b / dscale;
 epsilon = epsilon / dscale;
-gamma = 1.618;
+gamma = 1;
 %%
-AA = @(x) adjDx(Dx(x))+adjDy(Dy(x))+FT(F(x));
-maxcgiter = 16;
-tol = 5e-4;
+AA = @(x) 2*x+FT(F(x));
+maxcgiter = 10;
+tol = 1e-3;
 % z=0; zx=0; zy=0;
-v=0; vx=0; vy=0;
-M=FT(b);
+vp=0; vq=0; vr=0;
+M=FT(b);FM=F(M);
 out.objerr= []; out.time = [];
 converged=0;
 iter=0;
@@ -29,25 +30,26 @@ tic;
 while ~converged
     
     %%
-    zx  = softL2x(Dx(M)-vx,mu);
-    zy  = softL2y(Dy(M)-vy,mu);
-    z   = proxL2(F(M)-v);
+%     p  = llr_thresh(M-vp, mu,[16,16]);
+    p  = SVT(M-vp);
+    q  = proxTV(M-vq);
+    r  = proxL2(FM-vr);
     %%
     %% update M using cgsolve
-    bb=FT(z+v)+adjDx(zx+vx)+adjDy(zy+vy);
-    M = cgsolve(AA, bb, tol, maxcgiter);
+    bb=FT(r+vr)+(p+vp)+(q+vq);
+    M = cgsolve(AA, bb, M, tol, maxcgiter);
     
     FM = F(M);
-    vx = vx- gamma*(Dx(M)-zx);
-    vy = vy -gamma*(Dy(M)-zy);
-    v  = v - gamma*(FM-z);
+    vp = vp- gamma*(M-p);
+    vq = vq -gamma*(M-q);
+    vr = vr -gamma*(FM-r);
     
     %% stop criterion
     iter=iter+1;
     stopCriterion = norm(FM(:)-b(:));%divide by bnorm which is 1(normalized before)
     objerr = dscale*stopCriterion;
-    out.objerr = [out.objerr, objerr];
-    out.time = [out.time, toc];
+    out.objerr(iter) = objerr;
+    out.time(iter) = toc;
     
     fprintf('Iter %d/%d: obj error = %g\n', iter,maxiter,objerr);
     
@@ -72,7 +74,6 @@ return;
 
     function k=F(x)
         k=zeros(size(b));
-        %         xbt  = reshape(x * basis',[imgSize,imgSize, ETL]);
         xbts  = repmat(x,[1,1,1,coils]);
         for ee = 1 : ETL
             k(:,:,:,ee) = A{ee}*(squeeze(xbts(:,:,ee,:)).*smaps);
@@ -84,7 +85,37 @@ return;
             xb(:,:,ee,:) = A{ee}'*k(:,:,:,ee).*conj(smaps);
         end
         x = sum(xb,4);
-        %         x  = reshape(xb, imgSize^2, ETL)*basis;
+    end
+    function u=proxTV(g)
+        tau=0.249;
+        udual=D*g;
+        for i=1:16%8~16 are reasonable
+            DDtz=D*(D'*udual+g./lbd);
+            udual=(udual-tau*DDtz)./(1+tau*abs(DDtz));
+        end
+        dif = D'*udual.*lbd;
+        u=g + dif;
+        if (lbd < 5e-4 && lbd > 5e-6)
+            Du=D*u;
+            rnorm = norm(dif(:),2)^2/2;
+            %             snorm = norm(Du(:),1)*lbd;
+            tmp = sum(abs(Du).^2,4).^(1/2);%norm along dim 4
+            snorm = sum(tmp(:))*lbd;
+            if(rnorm>6.18*snorm)
+                lbd = lbd * 1.618;
+                fprintf('lbd * 1.618 = %.3e\t, rnorm = %.3e\t, snorm = %.3e\n',lbd, rnorm, snorm);
+            elseif (snorm>6.18*rnorm)
+                lbd = lbd / 1.618;
+                fprintf('lbd / 1.618 = %.3e\t, rnorm = %.3e\t, snorm = %.3e\n',lbd, rnorm, snorm);
+            end
+        end
+    end
+    function res = SVT(M)
+        M = reshape(M,[],ETL);
+        [U,S,V] = svd(M,0);
+        diagS = diag(S);
+        S = diag((diagS-mu).*(diagS>mu));%softthresholding, S are all positive
+        res = reshape(U*S*V',imgSize,imgSize,ETL);
     end
     function v = proxL2(v)%epsilon-radius ball centered at b
         vd = v - b;
@@ -98,72 +129,18 @@ return;
     end
 
 end
-function y=softL2x(x,p)
-sz = size(x,1);
-nx=sqrt(sum(x.^2,1));
-sf=max(nx-p,0)./nx;
-y = x.*repmat(sf,[sz,1]);
-% y(isnan(y))=0;
-end
-function y=softL2y(x,p)
-sz = size(x,2);
-nx=sqrt(sum(x.^2,2));
-sf=max(nx-p,0)./nx;
-y = x.*repmat(sf,[1,sz]);
-% y(isnan(y))=0;
-end
 
-function res = Dx(x)
-res = x([2:end,end],:,:) - x;
-end
 
-function res = Dy(x)
-res = x(:,[2:end,end],:) - x;
-end
 
-function res = Dt(x)
-res = x(:,:,[2:end,end]) - x;
-end
 
-function res = adjDx(x)
-res= x([1,1:end-1],:,:) - x;
-res(1,:,:) = -x(1,:,:);
-res(end,:,:) = x(end-1,:,:);
-end
-function res = adjDy(x)
-res= x(:,[1,1:end-1],:) - x;
-res(:,1,:) = -x(:,1,:);
-res(:,end,:) = x(:,end-1,:);
-end
-function res = adjDt(x)
-res= x(:,:,[1,1:end-1]) - x;
-res(:,:,1) = -x(:,:,1);
-res(:,:,end) = x(:,:,end-1);
-end
+function [x, res, iter] = cgsolve(A, b, x0, tol, maxiter, verbose)
 
-% function res = norm2x(vecs)
-%     N = size(vecs,1);
-%     res = zeros(N,1);
-%     for n = 1 : N
-%         res(n)=norm(vecs(n,:),2);
-%     end
-% end
-%
-% function res = norm2y(vecs)
-%     N = size(vecs,2);
-%     res = zeros(N,1);
-%     for n = 1 : N
-%         res(n)=norm(vecs(:,n),2);
-%     end
-% end
-
-function [x, res, iter] = cgsolve(A, b, tol, maxiter, verbose)
-
-if (nargin < 5), verbose = 1; end
+if (nargin < 6), verbose = 1; end
 
 implicit = isa(A,'function_handle');
 
-x = zeros(size(b));
+% x = zeros(size(b));
+x = x0;
 r = b;
 d = r;
 delta = r(:)'*r(:);

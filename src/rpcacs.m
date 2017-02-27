@@ -1,9 +1,9 @@
-function [L, S, out] = rpcacs_tv(opts)
+function [L, S, out] = rpcacs_tv(opts,b,smaps)
 %% set up parameters and operators
 A       = opts.FT;
 D       = opts.TV;
-b       = opts.data;%dimension nx,ny,nc
-smaps   = opts.smaps;
+% b       = opts.data;%dimension nx,ny,nc
+% smaps   = opts.smaps;
 % basis   = opts.basis;
 imgSize = size(smaps,1);
 coils   = size(smaps,3);
@@ -26,14 +26,14 @@ else
     mu=1e-4;
 end
 lbd = opts.lbd;
-dim = opts.dim;
+% dim = opts.dim;
 gamma = 1.618;
 %%
 % addpath PROPACK;
 B = @(x) FT(F(x))+x;
 converged=0;
 maxcgiter=10;
-tol = 5e-4;
+tol = 1e-3;
 % out.L=[];out.S=[];
 out.time=[];out.objerr=[];
 z=0; zs=0; zl=0;
@@ -123,9 +123,9 @@ return;
 
     function u=proxTV(g)
         tau=0.249;
-        %         udual=D*g;
-        udual = zeros(imgSize,imgSize,ETL,dim) ;
-        for i=1:16%8~16 are reasonable
+        udual=D*g;
+        %         udual = zeros(imgSize,imgSize,ETL,dim) ;
+        for i=1:12%8~16 are reasonable
             DDtz=D*(D'*udual+g./lbd);
             udual=(udual-tau*DDtz)./(1+tau*abs(DDtz));
         end

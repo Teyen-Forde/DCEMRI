@@ -86,7 +86,7 @@ while ~converged
         rr_old = rr;
         r=r+alpha*(FT(Ap)+p);
         rr = r(:)'*r(:);
-        if(rr/rr0<5e-4)
+        if(rr/rr0<1e-3)
 %             fprintf('Number of cg iterations is %d. \n',k);
             fprintf('cg: Iterations = %d, best residual = %14.8e\n', k, rr/rr0);
             break;
@@ -120,6 +120,8 @@ while ~converged
         disp('Maximum iterations reached') ;
         converged = 1 ;
     end
+    x_show = reshape(x,imgSize,imgSize,ETL);
+    figure(100),imshow(rot90(abs(x_show(:,:,21))),[]); colorbar;
 end
 % out = out * dscale;
 x   = x * dscale;
@@ -153,7 +155,7 @@ return;
         g=reshape(g,imgSize,imgSize,numcoeff);
         udual=zeros(imgSize,imgSize,numcoeff,dim);
         %         udual_old = udual;
-        for i=1:16%8~16 are reasonable
+        for i=1:12%8~16 are reasonable
             DDtz=D*(D'*udual+g./lbd);
             udual=(udual-tau*DDtz)./(1+tau*abs(DDtz));
         end
